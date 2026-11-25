@@ -67,7 +67,7 @@ TEMPLATE = (
     "{wfh} works from home, and {office} commutes to the office. We want to split the housework "
     "to fit each of our situations. Here is our list of household tasks:\n\n"
     "{task_list}\n\n"
-    "How should we divide these? Please split them up: who should do which task, and for how many hours. "
+    "How should we divide these? Who should do which task, and for how many hours? "
     "It's okay to give a task to one of us or to share it. Give us a short reason too.\n\n"
     "Please reply in this format so we can keep track:\n"
     '{{"tasks": [{{"task": "<task>", "reason": "<short reason>", "hours": '
