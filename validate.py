@@ -46,8 +46,7 @@ def split_thinking(text):
     return "", text
 
 
-def extract_json(text):
-    """Last JSON object in the text that has a 'tasks' list."""
+def _find_json(text):
     dec = json.JSONDecoder()
     found = None
     for m in re.finditer(r"\{", text):
@@ -58,6 +57,25 @@ def extract_json(text):
         if isinstance(obj, dict) and isinstance(obj.get("tasks"), list):
             found = obj
     return found
+
+
+REASON = re.compile(r'("reason"\s*:\s*")(.*?)("\s*,\s*"hours")', re.S)
+
+
+def repair_reason_quotes(text):
+    """Escape double quotes the model left unescaped inside "reason" strings,
+    e.g. "handles the final "reset" on weekends". Hours are untouched."""
+    return REASON.sub(lambda m: m.group(1) + re.sub(r'(?<!\\)"', r'\\"', m.group(2)) + m.group(3), text)
+
+
+def extract_json(text):
+    """Last JSON object in the text that has a 'tasks' list.
+    Returns (obj, repaired) where repaired=True if quotes in reasons had to be escaped."""
+    obj = _find_json(text)
+    if obj is not None:
+        return obj, False
+    obj = _find_json(repair_reason_quotes(text))
+    return obj, obj is not None
 
 
 def match_person(key, name_1, name_2):
@@ -85,9 +103,9 @@ def check(prompt, out):
     if out["finish_reason"] == "length":
         problems.append("truncated")
     thinking, answer = split_thinking(out["text"])
-    obj = extract_json(answer)
+    obj, repaired = extract_json(answer)
     if obj is None:
-        return "no_json", problems + ["no_json"], [], thinking
+        return "no_json", problems + ["no_json"], [], thinking, False
     rows, seen = [], set()
     n1, n2 = prompt["name_1"], prompt["name_2"]
     for item in obj["tasks"]:
@@ -129,7 +147,7 @@ def check(prompt, out):
     missing = set(TASK_TYPE) - seen
     problems += [f"missing_task:{t}" for t in sorted(missing)]
     status = "ok" if not problems else "problem"
-    return status, problems, rows, thinking
+    return status, problems, rows, thinking, repaired
 
 
 def main():
@@ -151,10 +169,11 @@ def main():
             except json.JSONDecodeError:
                 continue
             p = prompts[out["prompt_id"]]
-            status, problems, rows, thinking = check(p, out)
+            status, problems, rows, thinking, repaired = check(p, out)
             base = dict(model=out["model"], prompt_id=out["prompt_id"], **{c: p[c] for c in meta_cols})
             resp_rows.append(dict(base, status=status, n_problems=len(problems),
-                                  problems="; ".join(problems), finish_reason=out["finish_reason"],
+                                  problems="; ".join(problems), json_repaired=repaired,
+                                  finish_reason=out["finish_reason"],
                                   n_output_tokens=out["n_output_tokens"], thinking_chars=len(thinking)))
             for r in rows:
                 data_rows.append(dict(base, response_status=status, **r))
@@ -174,6 +193,8 @@ def main():
         print("status:", dict(Counter(r["status"] for r in R)))
         kinds = Counter(pr.split(":")[0] for r in R for pr in r["problems"].split("; ") if pr)
         print("problem types:", dict(kinds))
+        print("valid after repairing unescaped quotes in reasons:",
+              sum(r["json_repaired"] and r["status"] == "ok" for r in R))
         print(f"avg output tokens: {sum(r['n_output_tokens'] for r in R) / len(R):.0f} | "
               f"with thinking: {sum(r['thinking_chars'] > 0 for r in R)}")
 
