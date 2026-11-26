@@ -58,7 +58,7 @@ GENDER_COMBOS = [("wife", "husband"), ("husband", "wife"), ("wife", "wife"), ("h
 
 N_PAIRS = 10
 N_REPEATS = 5
-N_BASELINE_REPEATS = 50  # per work-from-home position
+N_BASELINE_REPEATS = 500  # per work-from-home position
 
 # ---- Appendix C, first-person version ------------------------------------------
 # Check this against the exact string you used in the pilot.
